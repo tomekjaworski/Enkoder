@@ -11,8 +11,13 @@ Moduł odpowiedzialny jest za:
  * sterowanie zaworami dostarczającymi wodę do natrysku wstęgi opinającej walec
  * i pewnie kilku innych drobiazgów :)
 
-# PCB
+# PCB - moduł główny
 ![Wizualizacja PCB](https://github.com/tomekjaworski/Enkoder/blob/master/schemat/enk.png)
+
+# PCB - synchronizacja kamery termowizyjnej
+![Wizualizacja PCB](https://github.com/tomekjaworski/Enkoder/blob/master/schemat_wyzwalacz/pcb.png)
+
+Zastosowana kamera: **Flir A615**.
 
 # Specyfikacja
 Sercem modułu jest mikroprocesor dsPIC firmy Microchip - dsPIC33FJ128MC706A.
