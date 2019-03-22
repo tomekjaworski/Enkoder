@@ -1,9 +1,12 @@
 #include "defs.h"
 #include "lcd.h"
 
-#define Delay1KTCYx(x) __delay32((x+5)*1000UL);
-#define Delay10TCYx(x) __delay32((x+5)*10UL);
-#define Delay10KTCYx(x) __delay32((x+5)*10000UL);
+#define Delay1KTCYx(x)  __delay32((x+10)*100UL);
+#define Delay10TCYx(x)  __delay32((x+10)*1000UL);
+#define Delay10KTCYx(x) __delay32((x+10)*10000UL);
+//#define Delay1KTCYx(x)  __delay32((x+100)*100000UL);
+//#define Delay10TCYx(x)  __delay32((x+100)*100000UL);
+//#define Delay10KTCYx(x) __delay32((x+100)*100000UL);
 
 #define LCDEnable		LCD_E = 1;
 #define LCDDisable		LCD_E = 0;
@@ -31,9 +34,9 @@ void LCDWriteByte(unsigned char byte)
 //
 	// impuls na magistrale
 	LCDEnable;
-	Delay10TCYx(5/*3+30*/);
+	Delay10TCYx(10/*3+30*/);
 	LCDDisable;
-	Delay10TCYx(5/*3+30*/);
+	Delay10TCYx(10/*3+30*/);
 
 	late = LATE & 0xFFF0;
 	LATE = late | (byte & 0x0F);
@@ -42,9 +45,9 @@ void LCDWriteByte(unsigned char byte)
 
 	// impuls na magistrale
 	LCDEnable;
-	Delay10TCYx(5/*2+30*/);
+	Delay10TCYx(10/*2+30*/);
 	LCDDisable;
-	Delay10TCYx(5/*2+30*/);
+	Delay10TCYx(10/*2+30*/);
 	Delay10TCYx(15/*10+30*/);
 	
 }

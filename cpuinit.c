@@ -1,25 +1,10 @@
 #include "defs.h"
 
-void HardwareLock(void)
-{
-//	OSCCON = 0x46;
-//	OSCCON = 0x57;
-//	OSCCONbits.IOLOCK = TRUE;
-}
-
-void HardwareUnlock(void)
-{
-//	OSCCON = 0x46;
-//	OSCCON = 0x57;
-//	OSCCONbits.IOLOCK = FALSE;
-}
 
 void InitCPU(void)
 {
 	SET_CPU_IPL(0x07);
 	
-	HardwareUnlock();
-		
 	AD1PCFGL = 0xFFFF; // tylko porty cyfrowe
 	AD2PCFGL = 0xFFFF; // tylko porty cyfrowe
 	
@@ -38,23 +23,17 @@ void InitCPU(void)
 	TRISF = 0b0000000000010000; // RXD
 	TRISG = 0x0000;
 	
-	// dla timera:
-	// F = 20MHz;
-	// Fcy = F/2;
-	// Ft1 = Fcy / 64; (preskaler);
-	// Tt1 = 1/Ft1;
-	// Tx = 100ms = 0.1s
-	// PR1 = Tx / Tt1;
 	
 	// timer 1
 	TMR1 = 0x0000;
-	PR1 = 15625; // timer1 co 100ms
+	PR1 = TIMER1_50MS; // timer1 co 50ms
 	T1CON = 0x0000;
 	T1CONbits.TON = TRUE;
-	T1CONbits.TCKPS = 0b10; // input clock prescale = 1:64
+	T1CONbits.TCKPS = 0b01; // input clock prescale = 1:8
+	IPC0bits.T1IP = 5;
 	
 	IFS0bits.T1IF = FALSE;
-	IEC0bits.T1IE = TRUE;
+	IEC0bits.T1IE = FALSE;
 	
 	
 	// UART 2
@@ -67,28 +46,56 @@ void InitCPU(void)
 	// 19200 = 32
 	
 	// ### BRGH = 1
-	// UxBRG = Fcy / (4xBaudRate) - 1
+	// UxBRG = [Fcy / (4xBaudRate)] - 1
 	// 9600 = 259
 	// 19200 = 129
 	// 57600 = 42
+	// 115200 = 21
 	U2MODE = 0x0000;
-	U2BRG = 129;
+	U2BRG = 21;
 	U2MODEbits.BRGH = TRUE;
 	
 	U2MODEbits.UARTEN = TRUE;
 	U2STAbits.UTXEN = TRUE;
 	
+	IEC1bits.U2TXIE = FALSE;
+	IEC1bits.U2RXIE = FALSE;
+	IEC4bits.U2EIE = FALSE;
+	
+	IFS1bits.U2TXIF = FALSE;
+	IFS1bits.U2RXIF = FALSE;
+	IFS4bits.U2EIF = FALSE;
+	
+	__C30_UART = 2;
+	/*
+		IFS1bits.U2TXIF
+		IFS1bits.U2RXIF
+		IFS4bits.U2EIF // error interrupt flag
+		
+		IEC1bits.U2TXIE
+		IEC1bits.U2RXIE
+		IEC4bits.U2EIE
+		
+	*/
 	
 	//PMD1bits.QEI1MD = 0;
 	QEICON = 0x0000;
-	QEICONbits.QEIM = 0b110; // 100
+	QEICONbits.QEIM = 0b111; // 100
 	QEICONbits.POSRES = TRUE;
+	QEICONbits.SWPAB = TRUE;
 	DFLTCONbits.CEID = TRUE;
 	IEC3bits.QEIIE = TRUE;
+	MAXCNT = PULSES_PER_REVOLUTION_I - 1;
 	
 	
 	SET_CPU_IPL(0x00);
 
+	LED3 = TRUE;
+	LED4 = TRUE;
+	LED5 = TRUE;
+	
+	SYNC_MINOR = SYNC_LOW;
+	SYNC_REVOLUTION = SYNC_LOW;
 
 	
 	
