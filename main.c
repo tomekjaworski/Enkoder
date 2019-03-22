@@ -5,6 +5,16 @@
 #include "comm.h"
 #include "spi_sw.h"
 
+WORD CalcCRC16(const char* buffer, WORD cnt);	// w misc.c
+WORD String2Hex16(const char* str);				// w misc.c
+int isXdigit(char x);
+WORD String2WORD(const char* str);
+
+BYTE power_bits[] = {0b00000100,0b00001000,0b00010000,0b00100000,0b01000000,0b10000000};
+
+#define RECV_BUFFER_SIZE	200
+#define ANGLES_PER_CHANNEL	16
+
 // promien i srednica walca w cm,
 
 void InitCPU(void);
@@ -48,18 +58,57 @@ struct UART
 	volatile int recv_plus_count;
 } rs = {};
 
+#define POWER_CASE_A	0x11
+#define POWER_CASE_B	0x12
+#define POWER_FIXED_OFF	0x00
+#define POWER_FIXED_ON	0x01
+
+struct POWER_ANGLE
+{
+	BYTE mode;
+	WORD start;
+	WORD stop;
+};
+
+struct POWER_CHANNEL
+{
+	struct POWER_ANGLE *pointer, *end;
+	struct POWER_ANGLE current_angle;
+	struct POWER_ANGLE angles[ANGLES_PER_CHANNEL];
+	WORD count;
+	BOOL reload;
+	BOOL power_on;
+} channels[6];
+
 struct SYNC
 {
 	BOOL enabled;
 	
 	WORD pulse_width;	// szerokosc impulsu [100us]
 	WORD delta;			// odleglosc co ile impulsow enkoderta ma byc odpalony impuls synchronizacyjny
+	WORD pulses_per_revolution; // liczba impulsow na obrot
 	WORD counter;
 	
 	WORD sync0_counter;
 	WORD sync1_counter;
+
+	struct POWER_ANGLE angles_new[ANGLES_PER_CHANNEL];
+	
+//	struct POWER_ANGLE power[6];
+//	struct POWER_ANGLE power_new[6];
+	BOOL angles_ready;
+//	BOOL power_new_ready;
+	
+	char buffer[RECV_BUFFER_SIZE];
+	WORD buffer_pos;
+	BOOL data_received;
 	
 } sync = {};	
+
+
+
+
+
 
 struct AVG_WINDOW
 {
@@ -76,17 +125,23 @@ void Init(void);
 
 char line[100];
 DAC_COMMAND cmd;
-
 DWORD Imax;
-
 DWORD CNT = 0;
-
+BOOL autostart_sync;
 int main(void)
 {
-	BOOL first_run = TRUE;
 	Init();
 	
-	printf("*** URUCHAMIANIE...\n");
+#if defined(__DEBUG)
+	autostart_sync = FALSE;
+#else
+	autostart_sync = TRUE;
+#endif
+	
+	
+	printf("\n\n\n*** URUCHAMIANIE...\n");
+	printf("Enkoder v1.6 2010-2013 Tomek Jaworski\n");
+	printf("Kompilacja: %s @ %s\n\n", __DATE__, __TIME__);	
 	
 	OpenSPI();
 	wnd.size = 10;
@@ -98,9 +153,41 @@ int main(void)
 	Imax = 10000; // 10,000 imp/50ms daje 600RPM przy 20,000 imp na obrót
 	
 	
-	sync.delta = PULSES_PER_REVOLUTION_I / 8;
+	sync.pulses_per_revolution = 8;
+	sync.delta = PULSES_PER_REVOLUTION_I / sync.pulses_per_revolution;
 	sync.pulse_width = 500;
 
+	//sync.power[0].start = 0xFFFF;
+	//memset(sync.power, 0x00, sizeof(struct POWER_ANGLE) * 6);
+	//memset(sync.power_new, 0x00, sizeof(struct POWER_ANGLE) * 6);
+
+	memset(sync.angles_new, 0x00, sizeof(struct POWER_ANGLE) * ANGLES_PER_CHANNEL);
+	memset(channels, 0x00, sizeof(struct POWER_CHANNEL) * 6);
+	sync.angles_ready = FALSE;
+
+	int i;
+	for (i = 0; i < 10; i++)
+	{
+		LED4 = 0;
+		 __delay32(500000);
+		LED4 = 1;
+		 __delay32(500000);
+	}	
+/*
+	while(1)
+	{
+		POWER1 = 1; __delay32(500000); POWER1 = 0;__delay32(500000);
+		POWER2 = 1; __delay32(500000); POWER2 = 0;__delay32(500000);
+		POWER3 = 1; __delay32(500000); POWER3 = 0;__delay32(500000);
+		POWER4 = 1; __delay32(500000); POWER4 = 0;__delay32(500000);
+		POWER5 = 1; __delay32(500000); POWER5 = 0;__delay32(500000);
+		POWER6 = 1; __delay32(500000); POWER6 = 0;__delay32(500000);
+	}	
+
+*/
+
+	// domyslnie generatory sa uruchomione
+	POWER_PORT |= power_bits[0] | power_bits[1] |power_bits[2] |power_bits[3] |power_bits[4] |power_bits[5];
 	
 start:
 
@@ -114,7 +201,7 @@ start:
 	rs.recv_plus_count = 0;
 	sync.enabled = FALSE;
 
-	printf("Enkoder v1.1 by TJ\n");
+
 	printf("Ustaw parametr: 'param=wartosc' lub wpisz 'run'\n");
 	printf("Zatrzymanie transmisji danych: '+++'\n\n");
 	printf("Dostepne polecenia:\n");
@@ -128,16 +215,19 @@ start:
 	printf("  set imax=xxxx (0-2^30)\n\t- ilosc impulsow / 50ms przy 600RPM\n");
 	printf("  set dac=xxx (0-4095)\n\t- ustawienie wartosci przetrownika D/A\n");
 	printf("  set spwidth=xxx (0-65e3)\n\t- dlugosc sygnalu synchronzacyjnego [x100us]\n");
-	printf("  set sdelta=xxx (0-19999)\n\t- przerwa miedzykolejnymi synchronizacjami (imp. enkodera)\n");
+	//printf("  set sdelta=xxx (0-19999)\n\t- przerwa miedzykolejnymi synchronizacjami (imp. enkodera)\n");
+	printf("  set scount=xxx (1-16)\n\t- Ustaw liczbe impulsow synchronizacyjnych na obrot\n");
+	printf("  set Px (x=1-6)\n\t- Wlaczenie generatora 1-6\n");
+	printf("  res Px (x=1-6)\n\t- Wyaczenie generatora 1-6\n");
 	printf("\n");
 	
 	//#define CMD_EQ(__line, __cmd) (strncmp(__line, (__cmd), strlen(__cmd)) == 0)
 
 	while(TRUE)
 	{
-		if (first_run)
+		if (autostart_sync)
 		{
-			first_run = FALSE;
+			autostart_sync = FALSE;
 			strcpy(line, "sync");
 		} else
 		{	
@@ -216,6 +306,49 @@ start:
 			printf("DONE (%d)\n", (int)CNT);
 			continue;
 		}	
+		
+		if (TestCommand(line, "set~p"))
+		{
+			int x = line[strlen(line) - 1] - 48; 
+			if (x < 1 || x > 6)
+			{
+				printf("Niepoprawny numer generatora: %d\n", x);
+				continue;
+			}
+			
+			POWER_PORT = POWER_PORT | power_bits[x - 1];
+			
+//			if (x == 1) POWER1 = 1;
+//			if (x == 2) POWER2 = 1;
+//			if (x == 3) POWER3 = 1;
+//			if (x == 4) POWER4 = 1;
+//			if (x == 5) POWER5 = 1;
+//			if (x == 6) POWER6 = 1;
+				
+			printf("Generator %d wlaczony.\n", x);
+			continue;
+		}
+		
+		if (TestCommand(line, "res~p"))
+		{
+			int x = line[strlen(line) - 1] - 48; 
+			if (x < 1 || x > 6)
+			{
+				printf("Niepoprawny numer generatora: %d\n", x);
+				continue;
+			}
+			
+			POWER_PORT = POWER_PORT & ~power_bits[x - 1];
+//			if (x == 1) POWER1 = 0;
+//			if (x == 2) POWER2 = 0;
+//			if (x == 3) POWER3 = 0;
+//			if (x == 4) POWER4 = 0;
+//			if (x == 5) POWER5 = 0;
+//			if (x == 6) POWER6 = 0;
+				
+			printf("Generator %d wylaczony.\n", x);
+			continue;
+		}
 			
 		if (TestCommand(line, "set~dac"))
 		{
@@ -234,13 +367,24 @@ start:
 			continue;
 		}		
 
+		/*
 		if (TestCommand(line, "set~sdelta"))
 		{
 			printf("Aktualna odleglosc miedzy impulsami synchronizacyjnymi: %d\n", sync.delta);
 			sync.delta = atol(strchr(line, '=') + 1);
 			printf("Nowa odleglosc miedzy impulsami synchronizacyjnymi: %d\n", sync.delta);
 			continue;
-		}		
+		}
+		*/	
+		
+		if (TestCommand(line, "set~scount"))
+		{
+			printf("Aktualna liczba impulsow na obrot: %d (delta=%d)\n", sync.pulses_per_revolution, sync.delta);
+			sync.pulses_per_revolution = atol(strchr(line, '=') + 1);
+			sync.delta = PULSES_PER_REVOLUTION_I / sync.pulses_per_revolution;
+			printf("Nowa liczba impulsow na obrot: %d (delta=%d)\n", sync.pulses_per_revolution, sync.delta);
+			continue;
+		}
 		
 		if (TestCommand(line, "sync~test"))
 		{
@@ -269,7 +413,7 @@ start:
 			getc();
 			continue;
 		}	
-		
+				
 		if (TestCommand(line, "sync"))
 		{
 			BYTE mode_old;
@@ -292,8 +436,106 @@ start:
 
 			while (sync.enabled)
 			{
-			//	printf("%04x\n", POSCNT);
-			//	__delay32(20000);
+				if (!sync.data_received)
+					continue;
+					
+				sync.data_received = FALSE;
+				asm("nop");
+				asm("nop");
+				asm("nop");
+				asm("nop");
+				
+				// sync.buffer[0] to '#' - naglowek	
+				BYTE CH = (sync.buffer[1] - 'A') - 1;
+				BYTE angles = sync.buffer[2] - 'A';
+
+				if (angles == 0)
+					continue; // cos jest nie tak
+
+				// sprawdzenie poprawnosci pakietu
+				int i;
+				for (i = 1; i < 2 + angles*2*4; i++)
+					if (sync.buffer[i] < 'A' || sync.buffer[i] > 'P')
+						continue; // blad w pakiecie
+				
+				WORD crc1 = CalcCRC16(sync.buffer + 1, 2 + angles*2*4);
+				WORD crc2 = String2WORD(sync.buffer + 1 + 2 + angles*2*4);
+				
+				if (crc2 != 0xFFFF) // jesli w pakiecie jest 0xFFFF to ignoruj sprawdzanie
+					if (crc2 != crc1)
+						continue;
+
+//				if (angles == 0)
+//				{
+//					sync.angles_new[0].mode = POWER_OFF;
+//					channels[CH].count = 0;
+//					channels[CH].reload = TRUE;
+//					sync.angles_ready = TRUE;					
+//				} else	
+//				{
+					for (i = 0; i < angles; i++)
+					{
+						sync.angles_new[i].start = String2WORD(sync.buffer + 3 + i * 2*4 + 0);
+						sync.angles_new[i].stop = String2WORD(sync.buffer + 3 + i * 2*4 + 4);
+						
+						switch (sync.angles_new[i].start)
+						{
+							case 0xFFFF:
+								sync.angles_new[i].mode = POWER_FIXED_ON;
+								break;
+								
+							case 0xFF00:
+								sync.angles_new[i].mode = POWER_FIXED_OFF;
+								break;
+								
+							default:
+								if (sync.angles_new[i].start <= sync.angles_new[i].stop)
+									sync.angles_new[i].mode = POWER_CASE_A; // start <=stop
+								else
+									sync.angles_new[i].mode = POWER_CASE_B; // start > stop
+						} // 			
+					}			
+					channels[CH].count = angles;
+					channels[CH].reload = TRUE;
+					sync.angles_ready = TRUE;
+				//}	
+				
+				putc('@');
+				
+				
+    			/*
+				int i;
+				for (i = 1; i < 6*2*4; i++)
+					if (!isXdigit(sync.buffer[i]))
+					continue; // blad w pakiecie
+					
+				// sprawdzenie sumy kontrolnej
+				WORD crc1 = CalcCRC16(sync.buffer + 1, 6*2*4);
+				WORD crc2 = String2Hex16(sync.buffer + 1 + 6*2*4);
+				
+				if (crc2 != 0xFFFF) // jesli w pakiecie jest 0xFFFF to ignoruj sprawdzanie
+					if (crc2 != crc1)
+						continue;
+					
+				for (i = 0; i < 6; i++)
+				{
+					sync.power_new[i].start = String2Hex16(sync.buffer + 1 + i * 8 + 0);
+					sync.power_new[i].stop = String2Hex16(sync.buffer + 1 + i * 8 + 4);
+					
+					if (sync.power_new[i].start == 0xFFFF)
+						sync.power_new[i].mode = POWER_OFF;
+					else
+						if (sync.power_new[i].start <= sync.power_new[i].stop)
+							sync.power_new[i].mode = POWER_CASE_A; // start <=stop
+						else
+							sync.power_new[i].mode = POWER_CASE_B; // start > stop
+				}			
+				
+				//SET_CPU_IPL(0x07);	
+				sync.power_new_ready = TRUE;
+				//SET_CPU_IPL(0x00);
+				
+				*/
 			}	
 
 			PR1 = TIMER1_50MS;
@@ -498,6 +740,7 @@ start:
 #define _AUTOPSV	__attribute__((auto_psv))
 #define _NOAUTOPSV	__attribute__((no_auto_psv))
 
+BOOL do_switch;
 void _ISR _NOAUTOPSV _T1Interrupt(void) // co 50ms
 {
 	IFS0bits.T1IF = FALSE;
@@ -505,9 +748,10 @@ void _ISR _NOAUTOPSV _T1Interrupt(void) // co 50ms
 	WORD delta;	
 	T1.encoder_pos = POSCNT;
 	
-
+	WORD i;
 	if (sync.enabled)
 	{
+		// liczniki czasów trwania obu impulsow synchronizacyjnych
 		if (sync.sync0_counter)
 		{
 			sync.sync0_counter--;
@@ -522,12 +766,180 @@ void _ISR _NOAUTOPSV _T1Interrupt(void) // co 50ms
 				SYNC_REVOLUTION = SYNC_LOW;
 		}
 		
+		// sprawdzenie, ktory impuls teraz poleci
 		if (T1.encoder_pos >= sync.counter)
 		{
 			sync.sync0_counter = sync.pulse_width;
 			SYNC_MINOR = SYNC_HIGH;
 			sync.counter += sync.delta;
 		}	
+	
+		
+		for (i = 0; i < 6; i++)
+		{
+			do_switch = FALSE;
+			if (channels[i].current_angle.mode == POWER_CASE_A) // start < stop
+			{
+				if ((T1.encoder_pos >= channels[i].current_angle.start) && (T1.encoder_pos < channels[i].current_angle.stop))
+				{
+					POWER_PORT |= power_bits[i]; 
+					//POWER1 = 1;
+					channels[i].power_on = TRUE;
+				} else
+					if (channels[i].power_on)
+					{
+						//POWER1 = 0;
+						POWER_PORT = POWER_PORT & ~power_bits[i];
+						do_switch = TRUE;
+					}	
+					
+						
+			} else
+				if (channels[i].current_angle.mode == POWER_CASE_B) // start > stop 
+				{
+					
+					if ((T1.encoder_pos >= channels[i].current_angle.start) || (T1.encoder_pos < channels[i].current_angle.stop))
+					{
+						//POWER1 = 1;
+						POWER_PORT |= power_bits[i];
+						channels[i].power_on = TRUE;
+					} else
+						if (channels[i].power_on)
+						{
+							//POWER1 = 0;
+							POWER_PORT = POWER_PORT & ~power_bits[i];
+							do_switch = TRUE;
+						}	
+						
+		
+		
+				} else
+					if (channels[i].current_angle.mode == POWER_FIXED_ON)
+						POWER_PORT |= power_bits[i];
+					else
+						POWER_PORT = POWER_PORT & ~power_bits[i]; // POWER_FIXED_OFF
+						//POWER1 = 0; // power off
+			
+			if (do_switch)
+			{
+				channels[i].current_angle = *channels[i].pointer;
+				channels[i].pointer++;
+				
+				channels[i].power_on = FALSE;
+				if (channels[i].pointer == channels[i].end)
+					channels[i].pointer = channels[i].angles;
+			}	
+		} // for
+		
+		
+		/*
+		// sterowanie k¹tem zaplonu
+		if (sync.power[0].mode == POWER_CASE_A)
+			POWER1 = (T1.encoder_pos >= sync.power[0].start) && (T1.encoder_pos < sync.power[0].stop);
+		if (sync.power[0].mode == POWER_CASE_B)
+			POWER1 = (T1.encoder_pos >= sync.power[0].start) || (T1.encoder_pos < sync.power[0].stop);
+
+		if (sync.power[1].mode == POWER_CASE_A)
+			POWER2 = (T1.encoder_pos >= sync.power[1].start) && (T1.encoder_pos < sync.power[1].stop);
+		if (sync.power[1].mode == POWER_CASE_B)
+			POWER2 = (T1.encoder_pos >= sync.power[1].start) || (T1.encoder_pos < sync.power[1].stop);
+
+		if (sync.power[2].mode == POWER_CASE_A)
+			POWER3 = (T1.encoder_pos >= sync.power[2].start) && (T1.encoder_pos < sync.power[2].stop);
+		if (sync.power[2].mode == POWER_CASE_B)
+			POWER3 = (T1.encoder_pos >= sync.power[2].start) || (T1.encoder_pos < sync.power[2].stop);
+
+		if (sync.power[3].mode == POWER_CASE_A)
+			POWER4 = (T1.encoder_pos >= sync.power[3].start) && (T1.encoder_pos < sync.power[3].stop);
+		if (sync.power[3].mode == POWER_CASE_B)
+			POWER4 = (T1.encoder_pos >= sync.power[3].start) || (T1.encoder_pos < sync.power[3].stop);
+
+		if (sync.power[4].mode == POWER_CASE_A)
+			POWER5 = (T1.encoder_pos >= sync.power[4].start) && (T1.encoder_pos < sync.power[4].stop);
+		if (sync.power[4].mode == POWER_CASE_B)
+			POWER5 = (T1.encoder_pos >= sync.power[4].start) || (T1.encoder_pos < sync.power[4].stop);
+
+		if (sync.power[5].mode == POWER_CASE_A)
+			POWER6 = (T1.encoder_pos >= sync.power[5].start) && (T1.encoder_pos < sync.power[5].stop);
+		if (sync.power[5].mode == POWER_CASE_B)
+			POWER6 = (T1.encoder_pos >= sync.power[5].start) || (T1.encoder_pos < sync.power[5].stop);
+		*/
+		
+		// jesli sa nowe dane o katach zaplonu, to skorzystaj z nich
+		if (sync.angles_ready)
+		{
+			//memcpy(sync.power, sync.power_new, sizeof(struct POWER_ANGLE) * 6);
+			sync.angles_ready = FALSE;
+			
+			for (i = 0; i < 6; i++)
+			{
+				if (!channels[i].reload)
+				continue;
+
+				channels[i].reload = FALSE;
+				memcpy(channels[i].angles, sync.angles_new, sizeof(struct POWER_ANGLE) * channels[i].count);
+				channels[i].pointer = channels[i].angles;
+				channels[i].end = channels[i].angles + channels[i].count;
+				//POWER1 = 0;
+				POWER_PORT = POWER_PORT & ~power_bits[i];
+				
+				// do switch
+				channels[i].current_angle = *channels[i].pointer;
+				channels[i].pointer++;
+			
+				if (channels[i].pointer == channels[i].end)
+					channels[i].pointer = channels[i].angles;
+					
+				
+			}	
+/*
+			if (channels[2].reload)
+			{
+				memcpy(channels[2].angles, sync.angles_new, sizeof(struct POWER_ANGLE) * 16);
+				channels[2].reload = FALSE;
+				POWER2 = 0;
+			}	
+
+			if (channels[3].reload)
+			{
+				memcpy(channels[3].angles, sync.angles_new, sizeof(struct POWER_ANGLE) * 16);
+				channels[3].reload = FALSE;
+				POWER3 = 0;
+			}	
+
+			if (channels[4].reload)
+			{
+				memcpy(channels[4].angles, sync.angles_new, sizeof(struct POWER_ANGLE) * 16);
+				channels[4].reload = FALSE;
+				POWER4 = 0;
+			}	
+
+			if (channels[5].reload)
+			{
+				memcpy(channels[5].angles, sync.angles_new, sizeof(struct POWER_ANGLE) * 16);
+				channels[5].reload = FALSE;
+				POWER5 = 0;
+			}	
+
+			if (channels[6].reload)
+			{
+				memcpy(channels[6].angles, sync.angles_new, sizeof(struct POWER_ANGLE) * 16);
+				channels[6].reload = FALSE;
+				POWER6 = 0;
+			}	
+*/
+/*
+			// wylaczenie generatorów do nastepnej aktualizacji
+			if (sync.power[0].mode == POWER_OFF) POWER1 = 0;
+			if (sync.power[1].mode == POWER_OFF) POWER2 = 0;
+			if (sync.power[2].mode == POWER_OFF) POWER3 = 0;
+			if (sync.power[3].mode == POWER_OFF) POWER4 = 0;
+			if (sync.power[4].mode == POWER_OFF) POWER5 = 0;
+			if (sync.power[5].mode == POWER_OFF) POWER6 = 0;
+			*/
+
+		}	
+			
 		return;
 	}	
 	
@@ -597,7 +1009,8 @@ void _ISR _NOAUTOPSV _T1Interrupt(void) // co 50ms
 	//sync.counter = 0;
 }
 
-void _ISR _NOAUTOPSV _Interrupt58(void)//_QEIInterrupt(void)
+//void _ISR _NOAUTOPSV _Interrupt58(void)//_QEIInterrupt(void)
+void _ISR _NOAUTOPSV _QEIInterrupt(void)//_QEIInterrupt(void)
 {
 	IFS3bits.QEIIF = FALSE;
 	LED4 = !LED4;
@@ -686,6 +1099,28 @@ void _ISR _NOAUTOPSV _U2RXInterrupt(void)
 	
 	IFS1bits.U2RXIF = FALSE;
 	byte = U2RXREG;
+	
+	if (sync.enabled)
+	{
+		if (byte == '#')
+		{
+			sync.buffer_pos = 0;
+			sync.data_received = FALSE;
+		}	
+			
+		if (sync.buffer_pos < RECV_BUFFER_SIZE - 1)
+		{
+			sync.buffer[sync.buffer_pos] = byte;
+			sync.buffer_pos++;
+			//if (sync.buffer_pos == 1+6*2*4+1*4)
+			//	sync.data_received = TRUE;
+		}	
+	
+		if (byte == '%')
+		{
+			sync.data_received = TRUE;
+		}	
+	}	
 	
 	if (byte != '+')
 	{

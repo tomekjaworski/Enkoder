@@ -68,7 +68,14 @@ void __delay32(DWORD cnt);
 #define TIMER1_500US	625
 #define TIMER1_100US	125
 
+//#define POWER6	LATDbits.LATD7
+//#define POWER5	LATDbits.LATD6
+//#define POWER4	LATDbits.LATD5
+//#define POWER3	LATDbits.LATD4
+//#define POWER2	LATDbits.LATD3
+//#define POWER1	LATDbits.LATD2
 
+#define POWER_PORT LATD
 
 union __BYTE_NIBBLES
 {
@@ -114,7 +121,28 @@ union __DWORD_NIBBLES
 		BYTE n7 : 4;
 	};	
 };
-
+/*
+typedef struct __WORD_BITS
+{
+	unsigned short value;
+	unsigned bit0 : 1;
+	unsigned bit1 : 1;
+	unsigned bit2 : 1;
+	unsigned bit3 : 1;
+	unsigned bit4 : 1;
+	unsigned bit5 : 1;
+	unsigned bit6 : 1;
+	unsigned bit7 : 1;
+	unsigned bit8 : 1;
+	unsigned bit9 : 1;
+	unsigned bit10 : 1;
+	unsigned bit11 : 1;
+	unsigned bit12 : 1;
+	unsigned bit13 : 1;
+	unsigned bit14 : 1;
+	unsigned bit15 : 1;
+} WORD_BITS;	
+*/
 typedef union __DWORD_NIBBLES DWORD_NIBBLES;
 typedef union __WORD_NIBBLES WORD_NIBBLES;
 typedef union __BYTE_NIBBLES BYTE_NIBBLES;

@@ -11,7 +11,7 @@ void InitCPU(void)
 	//LATA = 0;
 	LATB = 0;
 	LATC = 0;
-	LATD = 0;
+	LATD = 0; // 6 x synchronizacja kata zap³onu
 	LATE = 0;
 	LATF = 0;
 	LATG = 0;
