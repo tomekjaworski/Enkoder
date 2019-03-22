@@ -1,7 +1,7 @@
 #include <string.h>
 #include <dsp.h>
 #include "defs.h"
-#include "lcd.h"
+//#include "lcd.h"
 #include "comm.h"
 #include "spi_sw.h"
 
@@ -10,17 +10,19 @@ WORD String2Hex16(const char* str);				// w misc.c
 int isXdigit(char x);
 WORD String2WORD(const char* str);
 
+void SetValve(int valve, int state);
+
+//						RD2			RD3			RD4			RD5		RD6			RD7
 BYTE power_bits[] = {0b00000100,0b00001000,0b00010000,0b00100000,0b01000000,0b10000000};
 
 #define RECV_BUFFER_SIZE	200
 #define ANGLES_PER_CHANNEL	16
 
+
 // promien i srednica walca w cm,
 
 void InitCPU(void);
 BOOL TestCommand(const char* command_line, const char* pattern);
-
-//#define _USE_LCD
 
 struct __T1
 {
@@ -105,7 +107,16 @@ struct SYNC
 	
 } sync = {};	
 
+struct WATER_VALVES {
+	WORD mark_counter;
 
+	WORD counter500ms;
+	WORD timer_500ms;
+	
+	WORD valve_off_delay;
+	WORD valve_off_timer;
+	
+} water = {};
 
 
 
@@ -121,8 +132,6 @@ struct AVG_WINDOW
 
 void ChangeWindowSize(WORD new_size);
 
-void Init(void);
-
 char line[100];
 DAC_COMMAND cmd;
 DWORD Imax;
@@ -130,7 +139,7 @@ DWORD CNT = 0;
 BOOL autostart_sync;
 int main(void)
 {
-	Init();
+	InitCPU();
 	
 #if defined(__DEBUG)
 	autostart_sync = FALSE;
@@ -145,6 +154,13 @@ int main(void)
 	
 	OpenSPI();
 	wnd.size = 10;
+
+/*	while(1)
+	{
+		printf("%c", MARK ? '1' : '0');
+		__delay32(5000000);
+	}	
+*/
 
 
 	cmd.command = 0x0000;
@@ -205,7 +221,7 @@ start:
 	printf("Ustaw parametr: 'param=wartosc' lub wpisz 'run'\n");
 	printf("Zatrzymanie transmisji danych: '+++'\n\n");
 	printf("Dostepne polecenia:\n");
-	printf("  init\n\t- restart urzadzenia\n");
+	printf("  reset\n\t- restart urzadzenia\n");
 	printf("  run\n\t- uruchomienie pomiaru predkosci i pozycji\n");
 	printf("  dactest\n\t- tryb testowania przetwornika D/A\n");
 	printf("  fpr\n\t- Tryb FAST POSITION READ\n");
@@ -219,6 +235,9 @@ start:
 	printf("  set scount=xxx (1-16)\n\t- Ustaw liczbe impulsow synchronizacyjnych na obrot\n");
 	printf("  set Px (x=1-6)\n\t- Wlaczenie generatora 1-6\n");
 	printf("  res Px (x=1-6)\n\t- Wyaczenie generatora 1-6\n");
+	printf("  set Vx (x=1-5)\n\t- Wlaczenie zaworu 1-5 (x=9 - wszystkie)\n");
+	printf("  res Vx (x=1-5)\n\t- Wyaczenie zaworu 1-5 (x=9 - wszystkie)\n");
+	printf("  mark\n\t- Wyœwietla licznik czujnika znaku\n");
 	printf("\n");
 	
 	//#define CMD_EQ(__line, __cmd) (strncmp(__line, (__cmd), strlen(__cmd)) == 0)
@@ -317,14 +336,6 @@ start:
 			}
 			
 			POWER_PORT = POWER_PORT | power_bits[x - 1];
-			
-//			if (x == 1) POWER1 = 1;
-//			if (x == 2) POWER2 = 1;
-//			if (x == 3) POWER3 = 1;
-//			if (x == 4) POWER4 = 1;
-//			if (x == 5) POWER5 = 1;
-//			if (x == 6) POWER6 = 1;
-				
 			printf("Generator %d wlaczony.\n", x);
 			continue;
 		}
@@ -339,16 +350,44 @@ start:
 			}
 			
 			POWER_PORT = POWER_PORT & ~power_bits[x - 1];
-//			if (x == 1) POWER1 = 0;
-//			if (x == 2) POWER2 = 0;
-//			if (x == 3) POWER3 = 0;
-//			if (x == 4) POWER4 = 0;
-//			if (x == 5) POWER5 = 0;
-//			if (x == 6) POWER6 = 0;
-				
 			printf("Generator %d wylaczony.\n", x);
 			continue;
 		}
+
+		if (TestCommand(line, "set~v"))
+		{
+			int x = line[strlen(line) - 1] - 48; 
+			if ((x < 1 || x > 5) && x != 9)
+			{
+				printf("Niepoprawny numer zaworu: %d\n", x);
+				continue;
+			}
+			
+			SetValve(x, TRUE);
+			printf("Zawór %d wlaczony.\n", x);
+			continue;
+		}
+		
+		if (TestCommand(line, "res~v"))
+		{
+			int x = line[strlen(line) - 1] - 48; 
+			if ((x < 1 || x > 5) && x != 9)
+			{
+				printf("Niepoprawny numer zaworu: %d\n", x);
+				continue;
+			}
+			
+			SetValve(x, FALSE);
+			printf("Zawór %d wylaczony.\n", x);
+			continue;
+		}
+		
+		if (TestCommand(line, "mark"))
+		{
+			printf("Licznik czujnika znaku = %d\n", water.mark_counter);
+			continue;
+		}
+
 			
 		if (TestCommand(line, "set~dac"))
 		{
@@ -465,14 +504,8 @@ start:
 					if (crc2 != crc1)
 						continue;
 
-//				if (angles == 0)
-//				{
-//					sync.angles_new[0].mode = POWER_OFF;
-//					channels[CH].count = 0;
-//					channels[CH].reload = TRUE;
-//					sync.angles_ready = TRUE;					
-//				} else	
-//				{
+				if (CH >= 0 && CH <= 5) // kana³y 1-6 generator
+				{
 					for (i = 0; i < angles; i++)
 					{
 						sync.angles_new[i].start = String2WORD(sync.buffer + 3 + i * 2*4 + 0);
@@ -498,9 +531,31 @@ start:
 					channels[CH].count = angles;
 					channels[CH].reload = TRUE;
 					sync.angles_ready = TRUE;
-				//}	
+					
+					putc('@');
+				} // generator - kana³ 1-6
 				
-				putc('@');
+				if (CH == 9) // KANA£ 10: ustawienie zaworów
+				{
+					WORD arg1 = String2WORD(sync.buffer + 3 + 0 * 2*4 + 0); // flagi zaworów
+					WORD arg2 = String2WORD(sync.buffer + 3 + 0 * 2*4 + 4);	// czas dzia³ania w sekundach
+					
+					SetValve(1, !!(arg1 & 0x01));
+					SetValve(2, !!(arg1 & 0x02));
+					SetValve(3, !!(arg1 & 0x04));
+					SetValve(4, !!(arg1 & 0x08));
+					SetValve(5, !!(arg1 & 0x10));
+					water.valve_off_delay = arg2 << 1;
+					water.valve_off_timer = 0;
+					putc('@');
+				}
+
+				if (CH == 10) // KANA£ 11: pobieranie wartoœci licznika obrotów taœmy
+				{
+					//WORD arg1 = String2WORD(sync.buffer + 3 + 0 * 2*4 + 0);
+					//WORD arg2 = String2WORD(sync.buffer + 3 + 0 * 2*4 + 4);
+					printf("$%04x@", water.mark_counter);
+				}
 				
 				
     			/*
@@ -572,7 +627,7 @@ start:
 	//while(TRUE)
 	//	asm("nop");
 	
-	LCDClearScreen();
+//	LCDClearScreen();
 	
 	while(TRUE)
 	{
@@ -584,10 +639,10 @@ start:
 			T1.position *= ROLLER_POS_COEF;
 
 			sprintf(T1.str_position, "%.1f", T1.position);
-			LCDGotoXY(0, 1);
-			LCDWriteString("P=");
-			LCDWriteString(T1.str_position);		
-			LCDWriteString("cm  ");			
+		//	LCDGotoXY(0, 1);
+		//	LCDWriteString("P=");
+		//	LCDWriteString(T1.str_position);		
+		//	LCDWriteString("cm  ");			
 		}	
 		
 		
@@ -602,10 +657,10 @@ start:
 
 			sprintf(T1.str_velocity, T1.format_ptr, T1.velocity);
 				
-			LCDGotoXY(0, 0);
-			LCDWriteString("V=");
-			LCDWriteString(T1.str_velocity);		
-			LCDWriteString("rpm  ");
+		//	LCDGotoXY(0, 0);
+		//	LCDWriteString("V=");
+		//	LCDWriteString(T1.str_velocity);		
+		//	LCDWriteString("rpm  ");
 		}
 		
 		if (T1.exit_run_command)
@@ -744,6 +799,25 @@ BOOL do_switch;
 void _ISR _NOAUTOPSV _T1Interrupt(void) // co 50ms
 {
 	IFS0bits.T1IF = FALSE;
+	
+
+	if (water.counter500ms >= 5000)
+	{
+		water.counter500ms = 0;
+		water.timer_500ms++;
+		
+		
+		water.valve_off_timer++;
+		if (water.valve_off_delay > 0 && water.valve_off_timer > water.valve_off_delay)
+		{
+			water.valve_off_delay = 0;
+			SetValve(9, FALSE);
+		}	
+	}
+	water.counter500ms++;
+	
+	
+		
 	
 	WORD delta;	
 	T1.encoder_pos = POSCNT;
@@ -990,6 +1064,8 @@ void _ISR _NOAUTOPSV _T1Interrupt(void) // co 50ms
 	{
 		T1.counter1000ms = 0;
 		T1.recalc_velocity = TRUE;
+		
+	
 	}
 
 	if (T1.counter500ms >= 10)
@@ -1005,6 +1081,7 @@ void _ISR _NOAUTOPSV _T1Interrupt(void) // co 50ms
 	
 	T1.counter500ms++;
 	T1.counter1000ms++;
+	
 	
 	//sync.counter = 0;
 }
@@ -1141,25 +1218,18 @@ void _ISR _NOAUTOPSV _U2RXInterrupt(void)
 	
 }
 
-void Init(void)
+void _ISR _AUTOPSV _INT2Interrupt(void)
 {
-	InitCPU();
-
-#if defined(_USE_LCD)
-	LCDInit();
-	LCDCursorOff();
-	LCDGotoXY(2, 0);
-	LCDWriteString("Enk v1.0    tj");
-	LCDGotoXY(0, 1);
-	LCDWriteString("Uruchamianie...");
-
-	__delay32(20000000); //1sek
-	LCDClearScreen();
+	IFS1bits.INT2IF = FALSE;
 	
-	LCDGotoXY(0, 0);
-	LCDWriteString("Oczekiwanie na\npolecenie...");
-#endif
-}	
+	if (water.timer_500ms >= 2) // przerwanie min co sekundê
+	{
+		//printf("t=%d\n", water.timer_500ms);
+		water.mark_counter++;
+		water.timer_500ms = 0;
+	}	
+}
+
 
 void ChangeWindowSize(WORD new_size)
 {
@@ -1204,4 +1274,29 @@ BOOL TestCommand(const char* command_line, const char* pattern)
 		command_line++;
 		pattern++;
 	}	
+}	
+
+
+void SetValve(int valve, int state)
+{
+	if (valve == 9) // w³¹cz/wy³¹cz wszystkie
+	{
+		VALVE1 = state;
+		VALVE2 = state;
+		VALVE3 = state;
+		VALVE4 = state;
+		VALVE5 = state;
+	}
+	
+	// w³¹cz/wy³¹cz pojedyncze zawory
+	if (valve == 1)
+		VALVE1 = state;
+	if (valve == 2)
+		VALVE2 = state;
+	if (valve == 3)
+		VALVE3 = state;
+	if (valve == 4)
+		VALVE4 = state;
+	if (valve == 5)
+		VALVE5 = state;
 }	

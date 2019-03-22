@@ -37,14 +37,16 @@ void __delay32(DWORD cnt);
 #define LED4	LATDbits.LATD1
 #define LED5	LATCbits.LATC13
 
-#define LCD_RS	LATEbits.LATE4
-#define LCD_RW	LATEbits.LATE6
-#define LCD_E	LATEbits.LATE5
+#define VALVE1	LATEbits.LATE6
+#define VALVE2	LATEbits.LATE5
+#define VALVE3	LATEbits.LATE4
+#define	VALVE4	LATEbits.LATE0
+#define VALVE5	LATEbits.LATE2
+#define MARK	PORTDbits.RD9
 
-#define LCD_D4	LATEbits.LATE0
-#define LCD_D5	LATEbits.LATE1
-#define LCD_D6	LATEbits.LATE2
-#define LCD_D7	LATEbits.LATE3
+
+#define LCD_D5	LATEbits.LATE1 // nieu¿ywane
+#define LCD_D7	LATEbits.LATE3 // nieu¿ywane
 
 #define PULSES_PER_REVOLUTION_F	20000.0f
 #define PULSES_PER_REVOLUTION_I	20000

@@ -18,8 +18,8 @@ void InitCPU(void)
 	
 	TRISB = 0b0000000100111000; // CTS,QC,QB,QA
 	TRISC = 0b0000000000000000;
-	TRISD = 0b0000000000000000;
-	TRISE = 0b0000000000000000;
+	TRISD = 0b0000001000000000;
+	TRISE = 0b0000000000000000; // E3-czujnik znaku
 	TRISF = 0b0000000000010000; // RXD
 	TRISG = 0x0000;
 	
@@ -65,6 +65,13 @@ void InitCPU(void)
 	IFS1bits.U2TXIF = FALSE;
 	IFS1bits.U2RXIF = FALSE;
 	IFS4bits.U2EIF = FALSE;
+
+	// INT 2 (czujknik znaku)
+	IFS1bits.INT2IF = FALSE;
+	IEC1bits.INT2IE = TRUE;
+
+	
+	
 	
 	__C30_UART = 2;
 	/*
@@ -87,13 +94,23 @@ void InitCPU(void)
 	IEC3bits.QEIIE = TRUE;
 	MAXCNT = PULSES_PER_REVOLUTION_I - 1;
 	
+	// reakcja na czujnik znaku
+	
+	
 	
 	SET_CPU_IPL(0x00);
 
 	LED3 = TRUE;
 	LED4 = TRUE;
 	LED5 = TRUE;
-	
+
+	// wy³acz zawory
+	VALVE1 = FALSE;	
+	VALVE2 = FALSE;	
+	VALVE3 = FALSE;	
+	VALVE4 = FALSE;	
+	VALVE5 = FALSE;	
+
 	SYNC_MINOR = SYNC_LOW;
 	SYNC_REVOLUTION = SYNC_LOW;
 
