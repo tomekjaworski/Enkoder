@@ -540,6 +540,8 @@ start:
 					WORD arg1 = String2WORD(sync.buffer + 3 + 0 * 2*4 + 0); // flagi zaworów
 					WORD arg2 = String2WORD(sync.buffer + 3 + 0 * 2*4 + 4);	// czas dzia³ania w sekundach
 					
+					IEC0bits.T1IE = FALSE; // zablokuj przertwanie zegara, które koliduje z w³¹czeniem/wy³¹czeniem zaworów
+					
 					SetValve(1, !!(arg1 & 0x01));
 					SetValve(2, !!(arg1 & 0x02));
 					SetValve(3, !!(arg1 & 0x04));
@@ -547,6 +549,9 @@ start:
 					SetValve(5, !!(arg1 & 0x10));
 					water.valve_off_delay = arg2 << 1;
 					water.valve_off_timer = 0;
+					
+					IEC0bits.T1IE = TRUE; // w³¹cz ponownie przerwanie
+					
 					putc('@');
 				}
 
