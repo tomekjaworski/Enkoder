@@ -557,40 +557,6 @@ start:
 					printf("$%04x@", water.mark_counter);
 				}
 				
-				
-    			/*
-				int i;
-				for (i = 1; i < 6*2*4; i++)
-					if (!isXdigit(sync.buffer[i]))
-					continue; // blad w pakiecie
-					
-				// sprawdzenie sumy kontrolnej
-				WORD crc1 = CalcCRC16(sync.buffer + 1, 6*2*4);
-				WORD crc2 = String2Hex16(sync.buffer + 1 + 6*2*4);
-				
-				if (crc2 != 0xFFFF) // jesli w pakiecie jest 0xFFFF to ignoruj sprawdzanie
-					if (crc2 != crc1)
-						continue;
-					
-				for (i = 0; i < 6; i++)
-				{
-					sync.power_new[i].start = String2Hex16(sync.buffer + 1 + i * 8 + 0);
-					sync.power_new[i].stop = String2Hex16(sync.buffer + 1 + i * 8 + 4);
-					
-					if (sync.power_new[i].start == 0xFFFF)
-						sync.power_new[i].mode = POWER_OFF;
-					else
-						if (sync.power_new[i].start <= sync.power_new[i].stop)
-							sync.power_new[i].mode = POWER_CASE_A; // start <=stop
-						else
-							sync.power_new[i].mode = POWER_CASE_B; // start > stop
-				}			
-				
-				//SET_CPU_IPL(0x07);	
-				sync.power_new_ready = TRUE;
-				//SET_CPU_IPL(0x00);
-				
-				*/
 			}	
 
 			PR1 = TIMER1_50MS;
@@ -669,128 +635,7 @@ start:
 	
 	return 0;
 }
-//
-//	WORD max_pos = 0;
-//	while(TRUE)
-//	{
-//		WORD w = POSCNT;
-//		if (w > max_pos)
-//			if ((w & 0x8000) == 0)
-//				max_pos = w;
-//	}	
-//	
-//
-//
-//	while(TRUE)
-//	{
-//	
-//		LCDWriteString("Ala ma kota");
-//		__delay_ms(1000);
-//		
-//		LED3 = !LED3;
-//	}
-//
-//	velocity.value = 0;
-//	while(TRUE)
-//	{
-//		position.value = POSCNT;
-//		
-//		tekst[0] = position.n3;
-//		tekst[1] = position.n2;
-//		tekst[2] = position.n1;
-//		tekst[3] = position.n0;
-//		tekst[4] = velocity.n3;
-//		tekst[5] = velocity.n2;
-//		tekst[6] = velocity.n1;
-//		tekst[7] = velocity.n0;
-//		
-//		int i;
-//		for (i = 0; i < 8; i++)
-//		{
-//			if (tekst[i] > 9)
-//				tekst[i] += 'A' - 10;
-//			else
-//				tekst[i] += '0';
-//		}	
-//		
-//		for (i = 0; i < 9; i++)
-//		{
-//			U2TXREG = tekst[i];;
-//			while(!U2STAbits.TRMT);
-//		}	
-//		
-//		
-//		__delay32(5000000);
-//		
-//	}	
 
-//	char dummy;
-//	while(TRUE)
-//	{
-//		U2TXREG = 'U';
-//		while(!U2STAbits.TRMT);
-//		
-//		if(U2STAbits.OERR)
-//			U2STAbits.OERR = 0;
-//			
-//		if (U2STAbits.URXDA)
-//		{
-//			asm("nop");
-//			asm("nop");
-//			dummy = U2RXREG;
-//			asm("nop");
-//			asm("nop");
-//		}
-//		__delay_ms(100);
-//	}		
-//	
-//	while(TRUE)
-//	{
-//		LCDInit();
-//	
-//		LCDWriteString("Ala ma kota");
-//		__delay_ms(10);
-//		
-//		LED3 = !LED3;
-//	}
-//	
-//	while(TRUE)
-//	{
-//		
-		//LED3 = PORTBbits.RB3;
-		//LED4 = PORTBbits.RB4;
-		//LED5 = PORTBbits.RB5;
-		//LED3 = POSCNT & 1;
-		//LED4 = POSCNT & 2;
-		//LED5 = POSCNT & 4;
-//						
-						
-//		if (QEICONbits.CNTERR)
-//		{
-//			QEICONbits.CNTERR = 0;
-//			LED0 = !LED0;
-//		}	
-//		
-//		LED1 = QEICONbits.INDX;
-//	}
-//		__delay_ms(100);
-//		LED0 = 0;
-//		__delay_ms(100);
-//		LED0 = 1;
-//		__delay_ms(100);
-//		LED1 = 0;
-//		__delay_ms(100);
-//		LED1 = 1;
-//		__delay_ms(100);
-//		LED2 = 0;
-//		__delay_ms(100);
-//		LED2 = 1;
-//	}	
-
-	
-	//while(TRUE);
-	//return 0;
-//}
 
 #define _AUTOPSV	__attribute__((auto_psv))
 #define _NOAUTOPSV	__attribute__((no_auto_psv))
@@ -906,38 +751,6 @@ void _ISR _NOAUTOPSV _T1Interrupt(void) // co 50ms
 		} // for
 		
 		
-		/*
-		// sterowanie k¹tem zaplonu
-		if (sync.power[0].mode == POWER_CASE_A)
-			POWER1 = (T1.encoder_pos >= sync.power[0].start) && (T1.encoder_pos < sync.power[0].stop);
-		if (sync.power[0].mode == POWER_CASE_B)
-			POWER1 = (T1.encoder_pos >= sync.power[0].start) || (T1.encoder_pos < sync.power[0].stop);
-
-		if (sync.power[1].mode == POWER_CASE_A)
-			POWER2 = (T1.encoder_pos >= sync.power[1].start) && (T1.encoder_pos < sync.power[1].stop);
-		if (sync.power[1].mode == POWER_CASE_B)
-			POWER2 = (T1.encoder_pos >= sync.power[1].start) || (T1.encoder_pos < sync.power[1].stop);
-
-		if (sync.power[2].mode == POWER_CASE_A)
-			POWER3 = (T1.encoder_pos >= sync.power[2].start) && (T1.encoder_pos < sync.power[2].stop);
-		if (sync.power[2].mode == POWER_CASE_B)
-			POWER3 = (T1.encoder_pos >= sync.power[2].start) || (T1.encoder_pos < sync.power[2].stop);
-
-		if (sync.power[3].mode == POWER_CASE_A)
-			POWER4 = (T1.encoder_pos >= sync.power[3].start) && (T1.encoder_pos < sync.power[3].stop);
-		if (sync.power[3].mode == POWER_CASE_B)
-			POWER4 = (T1.encoder_pos >= sync.power[3].start) || (T1.encoder_pos < sync.power[3].stop);
-
-		if (sync.power[4].mode == POWER_CASE_A)
-			POWER5 = (T1.encoder_pos >= sync.power[4].start) && (T1.encoder_pos < sync.power[4].stop);
-		if (sync.power[4].mode == POWER_CASE_B)
-			POWER5 = (T1.encoder_pos >= sync.power[4].start) || (T1.encoder_pos < sync.power[4].stop);
-
-		if (sync.power[5].mode == POWER_CASE_A)
-			POWER6 = (T1.encoder_pos >= sync.power[5].start) && (T1.encoder_pos < sync.power[5].stop);
-		if (sync.power[5].mode == POWER_CASE_B)
-			POWER6 = (T1.encoder_pos >= sync.power[5].start) || (T1.encoder_pos < sync.power[5].stop);
-		*/
 		
 		// jesli sa nowe dane o katach zaplonu, to skorzystaj z nich
 		if (sync.angles_ready)
@@ -963,55 +776,7 @@ void _ISR _NOAUTOPSV _T1Interrupt(void) // co 50ms
 			
 				if (channels[i].pointer == channels[i].end)
 					channels[i].pointer = channels[i].angles;
-					
-				
 			}	
-/*
-			if (channels[2].reload)
-			{
-				memcpy(channels[2].angles, sync.angles_new, sizeof(struct POWER_ANGLE) * 16);
-				channels[2].reload = FALSE;
-				POWER2 = 0;
-			}	
-
-			if (channels[3].reload)
-			{
-				memcpy(channels[3].angles, sync.angles_new, sizeof(struct POWER_ANGLE) * 16);
-				channels[3].reload = FALSE;
-				POWER3 = 0;
-			}	
-
-			if (channels[4].reload)
-			{
-				memcpy(channels[4].angles, sync.angles_new, sizeof(struct POWER_ANGLE) * 16);
-				channels[4].reload = FALSE;
-				POWER4 = 0;
-			}	
-
-			if (channels[5].reload)
-			{
-				memcpy(channels[5].angles, sync.angles_new, sizeof(struct POWER_ANGLE) * 16);
-				channels[5].reload = FALSE;
-				POWER5 = 0;
-			}	
-
-			if (channels[6].reload)
-			{
-				memcpy(channels[6].angles, sync.angles_new, sizeof(struct POWER_ANGLE) * 16);
-				channels[6].reload = FALSE;
-				POWER6 = 0;
-			}	
-*/
-/*
-			// wylaczenie generatorów do nastepnej aktualizacji
-			if (sync.power[0].mode == POWER_OFF) POWER1 = 0;
-			if (sync.power[1].mode == POWER_OFF) POWER2 = 0;
-			if (sync.power[2].mode == POWER_OFF) POWER3 = 0;
-			if (sync.power[3].mode == POWER_OFF) POWER4 = 0;
-			if (sync.power[4].mode == POWER_OFF) POWER5 = 0;
-			if (sync.power[5].mode == POWER_OFF) POWER6 = 0;
-			*/
-
 		}	
 			
 		return;
