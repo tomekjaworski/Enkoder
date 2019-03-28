@@ -1,8 +1,8 @@
-%Sync_Send_2('init') - inicjalizacja uk≈Çadu
-%Sync_Send_2('done') - wy≈ÇƒÖczenie uk≈Çadu
-%Sync_Send_2(nr_kanalu(1-6), pozycje katowe w≈ÇƒÖcz-wy≈ÇƒÖcz) - sterowanie blokadƒÖ generator√≥w
-%Sync_Send_2(10,[a b])  - sterowanie natryskiwaniem, piƒôƒá ostatnich bit√≥w zmiennej a odpowiada zadanym stanom natryskiwaczy
-%Sync_Send_2(11, [0 0]) - odczyt licznika liczby obrot√≥w ta≈õmy
+%Sync_Send_2('init') - inicjalizacja uk≥adu
+%Sync_Send_2('done') - wy≥πczenie uk≥adu
+%Sync_Send_2(nr_kanalu(1-6), pozycje katowe w≥πcz-wy≥πcz) - sterowanie blokadπ generatorÛw
+%Sync_Send_2(10,[a b])  - sterowanie natryskiwaniem, piÍÊ ostatnich bitÛw zmiennej a odpowiada zadanym stanom natryskiwaczy
+%Sync_Send_2(11, [0 0]) - odczyt licznika liczby obrotÛw taúmy
 
 
 function pos = Sync_Send_2(command, arg)
@@ -130,11 +130,18 @@ function msg = Sync_CreateMessage(channel, points)
         
     CH = channel(:);
 
+    if CH == 10
+        % Kana≥ 10 - w≥πczenie zraszaczy
+        % Przekszta≥Ê czas w sekundach na jednostÍ wewnÍtrznπ (10ms):
+        interval = int32(Q(2) * 100);
+        Q(2) = interval;
+    end;
+    
     if (length(Q) > 16 * 2 || mod(uint32(length(Q)), 2) ~= 0)
-         error 'Niew≈Ça≈õciwe wymiary macierzy sterujƒÖcej';
+         error 'Niew≥aúciwe wymiary macierzy sterujπcej';
     end;
     if ((CH < 1 || CH > 6) && CH ~= 10 && CH ~= 11)
-         error 'Niew≈Ça≈õciwe numer  kana≈Çu';
+         error 'Niew≥aúciwe numer  kana≥u';
     end;        
 
     % konwersja na tekst
@@ -151,10 +158,10 @@ function msg = Sync_CreateMessage(channel, points)
     end;
 
     msg = ['#' msg Word2String(crc) '%'];
-
 end
 
 function str = Word2String( val )
+    val = mod(val, 65536);
     val = uint16(val);
     q3 = char('A'+bitand(bitshift(val, -12), 15));
     q2 = char('A'+bitand(bitshift(val, -8), 15));

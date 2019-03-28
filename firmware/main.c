@@ -110,8 +110,8 @@ struct SYNC
 struct WATER_VALVES {
 	WORD mark_counter;
 
-	WORD counter500ms;
-	WORD timer_500ms;
+	WORD counter10ms;
+	WORD timer_10ms;
 	
 	WORD valve_off_delay;
 	WORD valve_off_timer;
@@ -651,10 +651,10 @@ void _ISR _NOAUTOPSV _T1Interrupt(void) // co 50ms
 	IFS0bits.T1IF = FALSE;
 	
 
-	if (water.counter500ms >= 5000)
+	if (water.counter10ms >= 100)
 	{
-		water.counter500ms = 0;
-		water.timer_500ms++;
+		water.counter10ms = 0;
+		water.timer_10ms++;
 		
 		
 		water.valve_off_timer++;
@@ -664,7 +664,7 @@ void _ISR _NOAUTOPSV _T1Interrupt(void) // co 50ms
 			SetValve(9, FALSE);
 		}	
 	}
-	water.counter500ms++;
+	water.counter10ms++;
 	
 	
 		
@@ -992,11 +992,11 @@ void _ISR _AUTOPSV _INT2Interrupt(void)
 {
 	IFS1bits.INT2IF = FALSE;
 	
-	if (water.timer_500ms >= 2) // przerwanie min co sekundê
+	if (water.timer_10ms >= 2*50) // przerwanie min co sekundê
 	{
 		//printf("t=%d\n", water.timer_500ms);
 		water.mark_counter++;
-		water.timer_500ms = 0;
+		water.timer_10ms = 0;
 	}	
 }
 
