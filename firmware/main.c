@@ -542,12 +542,20 @@ start:
 					
 					IEC0bits.T1IE = FALSE; // zablokuj przertwanie zegara, które koliduje z w³¹czeniem/wy³¹czeniem zaworów
 					
-					SetValve(1, !!(arg1 & 0x01));
-					SetValve(2, !!(arg1 & 0x02));
-					SetValve(3, !!(arg1 & 0x04));
-					SetValve(4, !!(arg1 & 0x08));
-					SetValve(5, !!(arg1 & 0x10));
-					water.valve_off_delay = arg2 << 1;
+					if (arg2 == 0) // zerowy czas natrysku
+					{
+						// Wy³¹cz wszystkie spryskiwacze
+						SetValve(9, FALSE);
+					} else
+					{
+						SetValve(1, !!(arg1 & 0x01));
+						SetValve(2, !!(arg1 & 0x02));
+						SetValve(3, !!(arg1 & 0x04));
+						SetValve(4, !!(arg1 & 0x08));
+						SetValve(5, !!(arg1 & 0x10));
+					}	
+
+					water.valve_off_delay = arg2;
 					water.valve_off_timer = 0;
 					
 					IEC0bits.T1IE = TRUE; // w³¹cz ponownie przerwanie
