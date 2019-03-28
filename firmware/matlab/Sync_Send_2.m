@@ -1,9 +1,11 @@
-function Sync_Send(command, arg)
 %Sync_Send_2('init') - inicjalizacja uk艂adu
 %Sync_Send_2('done') - wy艂膮czenie uk艂adu
 %Sync_Send_2(nr_kanalu(1-6), pozycje katowe w艂膮cz-wy艂膮cz) - sterowanie blokad膮 generator贸w
 %Sync_Send_2(10,[a b])  - sterowanie natryskiwaniem, pi臋膰 ostatnich bit贸w zmiennej a odpowiada zadanym stanom natryskiwaczy
 %Sync_Send_2(11, [0 0]) - odczyt licznika liczby obrot贸w ta艣my
+
+
+function pos = Sync_Send_2(command, arg)
     global sync_obj;
     
     if ischar(command)
@@ -24,22 +26,36 @@ function Sync_Send(command, arg)
     end;
     
     if (isa(command, 'double'))
-        assert(nargin == 2, 'SYNC: Niew砤渃iwa ilo滄 parametr體');
+        assert(nargin == 2, 'SYNC: Niew艂a艣ciwa ilo艣膰 parametr贸w');
         msg = Sync_CreateMessage(command, arg);
     end;
 
             
 
-    fprintf('SYNC%d: Wysylanie ''%s''... ', msg(2) - 'A', msg);
+    %fprintf('SYNC%d: Wysylanie ''%s''... ', msg(2) - 'A', msg); %af
+    while sync_obj.conn.BytesAvailable > 1  %af
+        fread(sync_obj.conn, sync_obj.conn.BytesAvailable);  %af
+    end  %af
+        
     fwrite(sync_obj.conn, msg);
-    pause(0.1);
+    pause(0.4); %af
     if sync_obj.conn.BytesAvailable > 1
         resp = fread(sync_obj.conn, sync_obj.conn.BytesAvailable);
-        fprintf('B彻d (1): %d bajtow (%s)\n', length(resp), resp);
+        
+        if length(resp) == 6
+            if resp(1) ~= '$' || resp(6) ~= '@'
+                fprintf('B艂膮d (3): znak %d (%s)\n', resp, resp);
+                return;
+            end
+            pos = hex2dec(char(resp(2:5))');
+            return;
+        end;
+        
+        fprintf('B艂膮d (1): %d bajtow (%s)\n', length(resp), resp);
     else
         resp = fread(sync_obj.conn, 1);
         if (resp ~= '@')
-            fprintf('B彻d (2): znak %d (%s)\n', resp, resp);
+            fprintf('B艂膮d (2): znak %d (%s)\n', resp, resp);
         else
             fprintf('OK\n');
         end;
@@ -64,7 +80,7 @@ function Sync_Init()
 	global sync_obj;
     if (isempty(sync_obj))
         
-        comm_encoder = tcpip('192.168.0.19', 20000);
+        comm_encoder = tcpip('192.168.0.30', 1024);
         comm_encoder.Timeout = 1;
         comm_encoder.InputBufferSize = 10 * 1024;
 
@@ -115,10 +131,10 @@ function msg = Sync_CreateMessage(channel, points)
     CH = channel(:);
 
     if (length(Q) > 16 * 2 || mod(uint32(length(Q)), 2) ~= 0)
-         error 'Niew砤渃iwe wymiary macierzy steruj筩ej';
+         error 'Niew艂a艣ciwe wymiary macierzy steruj膮cej';
     end;
-    if (CH < 1 || CH > 6)
-         error 'Niew砤渃iwe numer  kana硊';
+    if ((CH < 1 || CH > 6) && CH ~= 10 && CH ~= 11)
+         error 'Niew艂a艣ciwe numer  kana艂u';
     end;        
 
     % konwersja na tekst
