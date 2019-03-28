@@ -1,4 +1,9 @@
 function Sync_Send(command, arg)
+%Sync_Send_2('init') - inicjalizacja układu
+%Sync_Send_2('done') - wyłączenie układu
+%Sync_Send_2(nr_kanalu(1-6), pozycje katowe włącz-wyłącz) - sterowanie blokadą generatorów
+%Sync_Send_2(10,[a b])  - sterowanie natryskiwaniem, pięć ostatnich bitów zmiennej a odpowiada zadanym stanom natryskiwaczy
+%Sync_Send_2(11, [0 0]) - odczyt licznika liczby obrotów taśmy
     global sync_obj;
     
     if ischar(command)
